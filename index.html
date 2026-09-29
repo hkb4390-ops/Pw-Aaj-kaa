@@ -9,7 +9,6 @@
      </script>
     <script src="js/api.js"></script>
 <script src="js/core.js"></script>
-     <script src="js/gatekeeper.js"></script>
      
 <script async="" src="js/adsbygoogle.js"></script>
       <script src="js/firebase-app-compat.js"></script>
@@ -90,34 +89,6 @@
         body.dark-mode .form-select { background-color: #0f172a; color: #f8fafc; border-color: #334155; }
         body.dark-mode .list-card { background: #1e293b; border-color: #334155; }
         body.dark-mode .sub-icon-letter { background: #334155 !important; color: #f8fafc !important; }
- /* KEY TIMER BADGE */
-.key-timer-badge {
-    background: rgba(16, 185, 129, 0.1);
-    color: #10b981;
-    border: 1px solid #10b981;
-    padding: 5px 12px;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    align-items: center;
-    gap: 6px;
-    margin-left: 15px;
-    white-space: nowrap;
-    transition: 0.3s ease;
-}
-.key-timer-badge.danger {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
-    border-color: #ef4444;
-}
-body.dark-mode .key-timer-badge {
-    background: rgba(16, 185, 129, 0.15);
-}
-body.dark-mode .key-timer-badge.danger {
-    background: rgba(239, 68, 68, 0.15);
-}
-
-        
 /* HEADER & SIDEBAR */
         header { background: var(--bg-card); padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 1000; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         .menu-btn { background: none; border: none; font-size: 1.5rem; color: var(--text-dark); cursor: pointer; margin-right: 15px; }
@@ -673,11 +644,7 @@ header {
                 <img src="images/images.png" style="height: 28px; border-radius: 6px;">
                 <span class="logo-text"></span>
             </a>
-       <!-- NEW: Key Expiry Timer Box -->
-        <div id="key-timer-badge" class="key-timer-badge d-sm-flex danger" style="cursor: pointer;">
-            <i class="fas fa-key"></i> <span id="key-timer-text">Key Expired (Tap to Generate)</span>
-        </div>
-        </div>
+</div>
         
         
                 <!-- Custom Topbar XP Badge -->
@@ -4197,217 +4164,5 @@ async function verifyDonationOTP() {
     </script>
      <script src="js/notify.js"></script>
 <script src="/blockon.js"></script>
-
-    <script>
-// ==========================================
-// 🛡️ 1. PLATFORM & KEY STATUS ENGINE
-// ==========================================
-function getPlatform() {
-    const host = window.location.hostname.toLowerCase();
-    const path = window.location.pathname.toLowerCase();
-    if (host.startsWith('nt.') || path.includes('/nt')) return 'nt';
-    if (host.startsWith('mj.') || path.includes('/mj')) return 'mj';
-    return 'pw';
-}
-
-function isKeyLocallyValid(platform) {
-    const key = localStorage.getItem(`${platform}_access_key`);
-    const expiryTime = localStorage.getItem(`${platform}_key_expires`);
-    if (!key || !expiryTime) return false;
-    
-    const now = Date.now();
-    return (parseInt(expiryTime, 10) - now) > 0;
-}
-
-// Checks with server if Key System is OFF or Key is Valid
-async function verifyAccessWithServer(platform, EnforceLocalExpiry = true) {
-    const key = localStorage.getItem(`${platform}_access_key`);
-    const locallyValid = isKeyLocallyValid(platform);
-
-    try {
-        // Using relative '/api/auth' prevents subdomain CORS failures, falls back to main domain if needed
-        const apiUrl = window.location.hostname.includes('studyparcham.in') 
-            ? 'https://studyparcham.in/api/auth' 
-            : '/api/auth';
-
-        const res = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'verify_key', 
-                key: key || 'integrity_check', 
-                platform: platform 
-            })
-        });
-        const data = await res.json();
-
-        // 1. If admin turned the key system OFF globally, always allow access!
-        if (data.system_off === true) {
-            return { allowed: true, systemOff: true };
-        }
-
-        // 2. If server says key is valid AND local expiry timer hasn't run out
-        if (data.success && (!EnforceLocalExpiry || locallyValid)) {
-            return { allowed: true, systemOff: false };
-        }
-
-        // 3. Otherwise, key is expired or invalid
-        return { allowed: false, systemOff: false };
-
-    } catch (e) {
-        // Offline / CORS fallback: Strictly trust local expiry timestamp instead of giving free access!
-        return { allowed: locallyValid, systemOff: false };
-    }
-}
-
-function redirectToGenerator(platform) {
-    // Clean up expired local storage so it doesn't loop
-    localStorage.removeItem(`${platform}_access_key`);
-    localStorage.removeItem(`${platform}_key_expires`);
-    window.location.href = `/generate.html?platform=${platform}`;
-}
-
-// ==========================================
-// 🚪 2. GLOBAL SMART GATEKEEPER (INTERCEPTS CLICKS)
-// ==========================================
-const originalWindowOpen = window.open;
-
-window.open = function(url, target, features) {
-    if (!url) return null;
-
-    const protectedKeywords = ['player.html', 'test.html', 'dpp.html', 'static.pw.live'];
-    const isProtected = protectedKeywords.some(keyword => url.toLowerCase().includes(keyword));
-
-    if (!isProtected) {
-        return originalWindowOpen.call(window, url, target, features);
-    }
-
-    const currentPlatform = getPlatform();
-
-    // Open temporary loading tab immediately to prevent Pop-up Blocker
-    const newTab = originalWindowOpen.call(window, 'about:blank', target, features);
-    if (newTab) {
-        newTab.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&display=swap" rel="stylesheet">
-                <style>
-                    body { margin: 0; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #ffffff; font-family: 'Poppins', sans-serif; color: #1f2937; }
-                    .spinner { width: 55px; height: 55px; border: 6px solid #f3f4f6; border-top: 6px solid #d4af37; border-radius: 50%; animation: spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite; margin-bottom: 25px; }
-                    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                    h2 { margin: 0 0 8px 0; font-size: 1.6rem; color: #0f172a; font-weight: 700; }
-                    p { margin: 0; color: #64748b; font-size: 0.95rem; font-weight: 500; }
-                </style>
-            </head>
-            <body>
-                <div class="spinner"></div>
-                <h2>Verifying Access...</h2>
-                <p>Securing your connection to the portal</p>
-            </body>
-            </html>
-        `);
-    }
-
-    // Verify both server status (is key system off?) and local expiration time
-    verifyAccessWithServer(currentPlatform, true).then(status => {
-        if (status.allowed) {
-            if (newTab) newTab.location.href = url;
-        } else {
-            if (newTab) newTab.close();
-            redirectToGenerator(currentPlatform);
-        }
-    });
-
-    return newTab;
-};
-</script>
-
 <script src="js/bruno.js"></script>
-
-<script>
-// ==========================================
-// ⏳ 3. KEY EXPIRY COUNTDOWN & AUTO-REDIRECT
-// ==========================================
-async function startKeyCountdown() {
-    const timerText = document.getElementById('key-timer-text');
-    const badge = document.getElementById('key-timer-badge');
-    if (!timerText || !badge) return;
-
-    const currentPlatform = getPlatform();
-
-    // First check with the server if the key system is turned OFF globally
-    const serverStatus = await verifyAccessWithServer(currentPlatform, true);
-
-    if (serverStatus.systemOff) {
-        timerText.innerText = "Free Access Active";
-        badge.classList.remove('d-none', 'danger');
-        return;
-    }
-
-    let expiryTime = localStorage.getItem(`${currentPlatform}_key_expires`);
-
-    // Make badge clickable when expired so user can manually click it too
-    badge.style.cursor = "pointer";
-    badge.onclick = () => {
-        if (!isKeyLocallyValid(currentPlatform)) {
-            redirectToGenerator(currentPlatform);
-        }
-    };
-
-    // If no expiry time exists or it is already expired on page load
-    if (!expiryTime || !isKeyLocallyValid(currentPlatform)) {
-        timerText.innerText = "Key Expired (Tap to Generate)";
-        badge.classList.remove('d-none');
-        badge.classList.add('danger');
-        
-        // Auto-redirect to generate page after 1.5 seconds
-        setTimeout(() => redirectToGenerator(currentPlatform), 1500);
-        return;
-    }
-
-    badge.classList.remove('d-none');
-
-    const timerInterval = setInterval(async () => {
-        const now = Date.now();
-        const distance = parseInt(expiryTime, 10) - now;
-
-        if (distance <= 0) {
-            clearInterval(timerInterval);
-            timerText.innerText = "Key Expired! Redirecting...";
-            badge.classList.add('danger');
-
-            // Double check if admin turned off the key system while the user was studying
-            const recheck = await verifyAccessWithServer(currentPlatform, true);
-            if (!recheck.systemOff) {
-                redirectToGenerator(currentPlatform);
-            } else {
-                timerText.innerText = "Free Access Active";
-                badge.classList.remove('danger');
-            }
-            return;
-        }
-
-        const hours = Math.floor(distance / (1000 * 60 * 60));
-        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-        timerText.innerText = `Expires in: ${hours}h ${minutes}m ${seconds}s`;
-        
-        if (hours < 1) {
-            badge.classList.add('danger');
-        } else {
-            badge.classList.remove('danger');
-        }
-    }, 1000);
-}
-
-document.addEventListener('DOMContentLoaded', startKeyCountdown);
-</script>
-
-
-
-  
 </body></html>
