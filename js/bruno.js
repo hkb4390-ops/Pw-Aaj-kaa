@@ -47,3 +47,4 @@
     // Start the very first peek 5 seconds after the page loads
     setTimeout(triggerPeek, 5000);
 })();
+
